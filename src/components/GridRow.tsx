@@ -35,8 +35,10 @@ const GridRow: React.FC<GridRowProps> = ({
   enableAnimation = true,
 }) => {
   const [isHighlighted, setIsHighlighted] = useState(highlightOnRender);
+  const [initialRender, setInitialRender] = useState(true);
   const rowRef = useRef<HTMLDivElement>(null);
 
+  // Only apply highlighting animation on specific events, not during scrolling
   useEffect(() => {
     if (highlightOnRender) {
       setIsHighlighted(true);
@@ -47,6 +49,17 @@ const GridRow: React.FC<GridRowProps> = ({
       return () => clearTimeout(timeout);
     }
   }, [highlightOnRender]);
+
+  // Disable animation after first render to prevent animation during scrolling
+  useEffect(() => {
+    if (initialRender) {
+      const timeout = setTimeout(() => {
+        setInitialRender(false);
+      }, 300); // Match the duration of the fadeIn animation
+
+      return () => clearTimeout(timeout);
+    }
+  }, [initialRender]);
 
   const handleClick = () => {
     onRowClick && onRowClick(rowData, rowIndex);
@@ -91,13 +104,12 @@ const GridRow: React.FC<GridRowProps> = ({
         ${styles.gridRow}
         ${isSelected ? styles.selected : ""}
         ${isHighlighted ? styles.highlightRow : ""}
-        ${enableAnimation ? styles.fadeIn : ""}
+        ${enableAnimation && initialRender ? styles.fadeIn : ""}
         ${isFocused ? styles.focused : ""}
       `}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
-      style={{ animationDelay: `${rowIndex * 0.02}s` }}
       data-row-index={rowIndex}
       role="row"
       aria-selected={isSelected}

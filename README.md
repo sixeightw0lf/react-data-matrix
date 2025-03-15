@@ -1,8 +1,8 @@
+<div style="width:100%; height:auto; object-fit:cover;"><img  src="./react-data-matrix.png"/></div>
+
 # React Data Matrix
 
 A high-performance, customizable React data grid with advanced features and WebGL rendering support. Perfect for displaying large datasets with excellent UX.
-
-![React Data Matrix Demo](https://github.com/yourusername/react-data-matrix/raw/main/docs/demo.gif)
 
 ## Features
 
@@ -194,4 +194,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-Made with ❤️ by [Your Name]
+Made with ❤️ by SixeightW0lf x AI

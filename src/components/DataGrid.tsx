@@ -430,6 +430,8 @@ const DataGrid: React.FC<DataGridProps> = ({
           rowHeight={rowHeight}
           width={width}
           height={height}
+          onRowClick={onRowClick}
+          onRowDoubleClick={onRowDoubleClick}
         />
         {pagination && (
           <GridFooter

@@ -312,7 +312,7 @@ const App: React.FC = () => {
           thousands of rows
         </p>
         <DataGrid
-          data={data.slice(0, 100)}
+          data={data}
           columns={columns}
           rowHeight={48}
           height={500}

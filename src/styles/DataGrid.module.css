@@ -162,12 +162,68 @@
 }
 
 /* WebGL Container */
-.webGLContainer {
+.webGLWrapper {
+  position: relative;
+  display: flex;
   border: 1px solid var(--grid-border-color);
   border-radius: var(--grid-border-radius);
   box-shadow: var(--grid-box-shadow);
   overflow: hidden;
+  background-color: var(--grid-background);
+  transition: var(--grid-transition);
+}
+
+.webGLContainer {
+  flex: 1;
+  overflow: hidden;
   position: relative;
+  background-color: var(--grid-background);
+}
+
+/* WebGL Scrollbar */
+.webGLScrollbar {
+  width: 12px;
+  background-color: var(--grid-header-bg);
+  border-left: 1px solid var(--grid-border-color);
+  position: relative;
+  transition: var(--grid-transition);
+}
+
+.webGLScrollThumb {
+  width: 8px;
+  background-color: #c1c1c1;
+  border-radius: 4px;
+  position: absolute;
+  left: 2px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.webGLScrollThumb:hover {
+  background-color: var(--grid-primary-color);
+}
+
+/* Dark mode support for WebGL */
+:global(.dark-mode) .webGLWrapper {
+  background-color: #1e1e1e;
+  border-color: #444;
+}
+
+:global(.dark-mode) .webGLContainer {
+  background-color: #1e1e1e;
+}
+
+:global(.dark-mode) .webGLScrollbar {
+  background-color: #2a2a2a;
+  border-color: #444;
+}
+
+:global(.dark-mode) .webGLScrollThumb {
+  background-color: #555;
+}
+
+:global(.dark-mode) .webGLScrollThumb:hover {
+  background-color: var(--grid-primary-color);
 }
 
 /* Loading Styles */
