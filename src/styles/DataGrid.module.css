@@ -1,0 +1,422 @@
+/* Base Styles with Variables for Theming */
+:root {
+  --grid-primary-color: #2196f3;
+  --grid-primary-light: #bbdefb;
+  --grid-primary-hover: #1976d2;
+  --grid-border-color: #e0e0e0;
+  --grid-header-bg: #f5f5f5;
+  --grid-row-hover: #f9f9f9;
+  --grid-row-selected: #e3f2fd;
+  --grid-cell-padding: 8px 12px;
+  --grid-border-radius: 4px;
+  --grid-box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --grid-transition: all 0.2s ease;
+}
+
+/* Main Container */
+.dataGrid {
+  border: 1px solid var(--grid-border-color);
+  border-radius: var(--grid-border-radius);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  box-shadow: var(--grid-box-shadow);
+  overflow: hidden;
+  background-color: white;
+  position: relative;
+  transition: var(--grid-transition);
+  width: 100%;
+}
+
+/* Header Styles */
+.gridHeader {
+  display: flex;
+  background-color: var(--grid-header-bg);
+  font-weight: 600;
+  border-bottom: 1px solid var(--grid-border-color);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.headerCell {
+  padding: var(--grid-cell-padding);
+  border-right: 1px solid var(--grid-border-color);
+  flex: 1;
+  text-align: left;
+  user-select: none;
+  cursor: pointer;
+  transition: var(--grid-transition);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerCell:hover {
+  background-color: var(--grid-primary-light);
+}
+
+.headerCell.sorted {
+  background-color: var(--grid-primary-light);
+  color: var(--grid-primary-hover);
+}
+
+.sortIcon {
+  margin-left: 4px;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.sortIcon.ascending {
+  transform: rotate(0deg);
+}
+
+.sortIcon.descending {
+  transform: rotate(180deg);
+}
+
+/* Row Styles */
+.gridRow {
+  display: flex;
+  border-bottom: 1px solid var(--grid-border-color);
+  transition: var(--grid-transition);
+}
+
+.gridRow:hover {
+  background-color: var(--grid-row-hover);
+}
+
+.gridRow.selected {
+  background-color: var(--grid-row-selected);
+}
+
+/* Cell Styles */
+.gridCell {
+  padding: var(--grid-cell-padding);
+  border-right: 1px solid var(--grid-border-color);
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer Styles */
+.gridFooter {
+  background-color: var(--grid-header-bg);
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--grid-border-color);
+}
+
+/* Pagination Controls */
+.paginationControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pageButton {
+  padding: 4px 8px;
+  background-color: white;
+  border: 1px solid var(--grid-border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: var(--grid-transition);
+}
+
+.pageButton:hover {
+  background-color: var(--grid-primary-light);
+}
+
+.pageButton.active {
+  background-color: var(--grid-primary-color);
+  color: white;
+  border-color: var(--grid-primary-color);
+}
+
+/* WebGL Container */
+.webGLContainer {
+  border: 1px solid var(--grid-border-color);
+  border-radius: var(--grid-border-radius);
+  box-shadow: var(--grid-box-shadow);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Loading Styles */
+.loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--grid-primary-light);
+  border-top: 3px solid var(--grid-primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .dataGrid {
+    font-size: 14px;
+  }
+
+  .gridCell, .headerCell {
+    padding: 6px 8px;
+  }
+}
+
+/* Empty State */
+.emptyState {
+  padding: 40px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fadeIn {
+  animation: fadeIn 0.3s ease;
+}
+
+/* Row highlight animation */
+@keyframes highlightRow {
+  0% { background-color: var(--grid-primary-light); }
+  100% { background-color: transparent; }
+}
+
+.highlightRow {
+  animation: highlightRow 1s ease;
+}
+
+/* Filter controls */
+.filterControls {
+  padding: 8px;
+  background-color: #f8f8f8;
+  border-bottom: 1px solid var(--grid-border-color);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterInput {
+  padding: 6px 10px;
+  border: 1px solid var(--grid-border-color);
+  border-radius: 4px;
+  flex: 1;
+  min-width: 160px;
+}
+
+/* Context menu */
+.contextMenu {
+  position: absolute;
+  background-color: white;
+  border: 1px solid var(--grid-border-color);
+  box-shadow: var(--grid-box-shadow);
+  border-radius: 4px;
+  padding: 4px 0;
+  z-index: 100;
+}
+
+.contextMenuItem {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.contextMenuItem:hover {
+  background-color: var(--grid-primary-light);
+}
+
+/* Resizable columns */
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+}
+
+.resizeHandle:hover {
+  background-color: var(--grid-primary-color);
+}
+
+.resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+/* Keyboard Focus Styles */
+.focused {
+  position: relative;
+  outline: 2px solid var(--grid-primary-color);
+  outline-offset: -2px;
+  z-index: 2;
+}
+
+.gridCell.focused {
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.gridRow.focused {
+  background-color: rgba(33, 150, 243, 0.05);
+}
+
+/* Improve the disabled page button style */
+.pageButton.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f5f5f5;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Improved loading spinner */
+.loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 20;
+  backdrop-filter: blur(2px);
+}
+
+.loadingSpinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--grid-primary-light);
+  border-top: 3px solid var(--grid-primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Pagination Info */
+.paginationInfo {
+  color: var(--light-text);
+  font-size: 0.9rem;
+}
+
+/* Page Size Selector */
+.pageSizeSelector {
+  display: flex;
+  align-items: center;
+}
+
+.pageSizeSelector select {
+  padding: 4px 8px;
+  border: 1px solid var(--grid-border-color);
+  border-radius: 4px;
+  background-color: white;
+  font-size: 0.9rem;
+  margin-left: 8px;
+  cursor: pointer;
+}
+
+/* Focus styles for better keyboard navigation */
+.dataGrid:focus {
+  outline: 2px solid var(--grid-primary-color);
+  outline-offset: 2px;
+}
+
+.pageButton:focus {
+  outline: 2px solid var(--grid-primary-color);
+  outline-offset: 1px;
+}
+
+/* Improved cell value rendering */
+.emptyCell {
+  color: #999;
+  font-style: italic;
+}
+
+/* Add subtle transition for hover effects */
+.gridRow, .gridCell, .headerCell {
+  transition: background-color 0.15s ease;
+}
+
+/* Better support for dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grid-primary-color: #90caf9;
+    --grid-primary-light: rgba(144, 202, 249, 0.2);
+    --grid-primary-hover: #42a5f5;
+    --grid-border-color: #444;
+    --grid-header-bg: #333;
+    --grid-row-hover: #333;
+    --grid-row-selected: rgba(144, 202, 249, 0.2);
+  }
+
+  .dataGrid {
+    background-color: #222;
+    color: #fff;
+  }
+
+  .gridHeader {
+    background-color: #333;
+  }
+
+  .gridRow:hover {
+    background-color: #333;
+  }
+
+  .pageButton {
+    background-color: #333;
+    color: #fff;
+  }
+
+  .pageButton.active {
+    background-color: var(--grid-primary-color);
+    color: #000;
+  }
+
+  .emptyState {
+    color: #999;
+  }
+
+  .loading {
+    background-color: rgba(34, 34, 34, 0.7);
+  }
+}
