@@ -88,6 +88,7 @@ const DataGrid: React.FC<DataGridProps> = ({
   // Refs
   const listRef = useRef<List | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [gridDimensions, setGridDimensions] = useState({ width: 0, height: 0 });
 
   // State
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(
@@ -109,6 +110,36 @@ const DataGrid: React.FC<DataGridProps> = ({
     rowData: any;
     rowIndex: number;
   } | null>(null);
+
+  // Recalculate grid dimensions on window resize
+  useEffect(() => {
+    const calculateGridDimensions = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setGridDimensions({
+          width: rect.width,
+          height: typeof height === "string" ? rect.height : Number(height),
+        });
+      }
+    };
+
+    // Calculate dimensions on mount
+    calculateGridDimensions();
+
+    // Set up resize observer for responsive behavior
+    const resizeObserver = new ResizeObserver(calculateGridDimensions);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+
+    // Clean up observer
+    return () => {
+      if (containerRef.current) {
+        resizeObserver.unobserve(containerRef.current);
+      }
+      resizeObserver.disconnect();
+    };
+  }, [height]);
 
   // Context menu handlers
   const handleContextMenu = useCallback(
@@ -487,7 +518,11 @@ const DataGrid: React.FC<DataGridProps> = ({
     <div
       className={`${styles.dataGrid} ${className}`}
       ref={containerRef}
-      style={{ position: "relative" }}
+      style={{
+        position: "relative",
+        width: typeof width === "number" ? `${width}px` : width,
+        height: typeof height === "number" ? `${height}px` : height,
+      }}
       onKeyDown={handleKeyDown}
       tabIndex={keyboardNavigation ? 0 : undefined}
       aria-labelledby={ariaLabelledBy}
@@ -511,38 +546,45 @@ const DataGrid: React.FC<DataGridProps> = ({
         onColumnResize={handleColumnResize}
       />
 
-      <List
-        ref={listRef}
-        height={typeof height === "number" ? height : 400}
-        itemCount={processedData.length}
-        itemSize={rowHeight}
-        width={width}
-        className={styles.virtualList}
-      >
-        {({ index, style }: ListChildComponentProps) => (
-          <div style={style}>
-            <GridRow
-              rowData={processedData[index]}
-              rowIndex={index}
-              columns={columns.map((col, colIndex) => ({
-                ...col,
-                width: columnWidths[col.key] || col.width,
-              }))}
-              isSelected={selectedRows.has(index)}
-              isFocused={focusedCell?.rowIndex === index}
-              focusedColumnIndex={
-                focusedCell?.rowIndex === index
-                  ? focusedCell.columnIndex
-                  : undefined
-              }
-              onRowClick={handleRowClick}
-              onRowDoubleClick={onRowDoubleClick}
-              onRowContextMenu={handleContextMenu}
-              enableAnimation={animateRows}
-            />
-          </div>
-        )}
-      </List>
+      <div className={styles.tableWrapper}>
+        <List
+          ref={listRef}
+          height={
+            gridDimensions.height
+              ? Math.max(100, gridDimensions.height - 48)
+              : 400
+          } // Ensure minimum height of 100px
+          itemCount={processedData.length}
+          itemSize={rowHeight}
+          width={gridDimensions.width || "100%"}
+          className={styles.virtualList}
+          overscanCount={5} // Increase overscan for smoother scrolling
+        >
+          {({ index, style }: ListChildComponentProps) => (
+            <div style={{ ...style, width: "100%" }}>
+              <GridRow
+                rowData={processedData[index]}
+                rowIndex={index}
+                columns={columns.map((col) => ({
+                  ...col,
+                  width: columnWidths[col.key] || col.width,
+                }))}
+                isSelected={selectedRows.has(index)}
+                isFocused={focusedCell?.rowIndex === index}
+                focusedColumnIndex={
+                  focusedCell?.rowIndex === index
+                    ? focusedCell.columnIndex
+                    : undefined
+                }
+                onRowClick={handleRowClick}
+                onRowDoubleClick={onRowDoubleClick}
+                onRowContextMenu={handleContextMenu}
+                enableAnimation={animateRows}
+              />
+            </div>
+          )}
+        </List>
+      </div>
 
       {pagination && (
         <GridFooter

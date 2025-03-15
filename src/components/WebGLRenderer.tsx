@@ -37,10 +37,12 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
   });
   const [scrollOffset, setScrollOffset] = useState(0);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
-  const totalHeight = useRef(data.length * rowHeight);
+  const totalHeight = useRef((data.length + 1) * rowHeight);
   const visibleRowsCount = useRef(0);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const animationFrameRef = useRef<number | null>(null);
+  const isMouseInsideRef = useRef(false);
+  const hasInitializedRef = useRef(false);
 
   // Check for dark mode
   useEffect(() => {
@@ -62,129 +64,364 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Initialize the WebGL scene
-  const initScene = useCallback(() => {
+  // Setup and initialize the WebGL renderer
+  useEffect(() => {
     if (!mountRef.current) return;
 
     // Get container dimensions
-    const containerWidth =
-      typeof width === "number" ? width : mountRef.current.clientWidth;
-    const containerHeight =
-      typeof height === "number"
-        ? height
-        : mountRef.current.clientHeight || 400;
+    const { width, height } = mountRef.current.getBoundingClientRect();
+    setContainerDimensions({ width, height });
+    visibleRowsCount.current = Math.ceil(height / rowHeight) + 1;
 
-    setContainerDimensions({
-      width: containerWidth,
-      height: containerHeight,
-    });
+    // Setup THREE.js renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
 
-    // Calculate visible rows
-    visibleRowsCount.current = Math.ceil(containerHeight / rowHeight) + 2; // Add buffer rows
+    // Set clear color based on dark mode
+    renderer.setClearColor(0x000000, 0);
+
+    // Remove any existing canvas
+    while (mountRef.current.firstChild) {
+      mountRef.current.removeChild(mountRef.current.firstChild);
+    }
+
+    // Add the renderer to the DOM
+    mountRef.current.appendChild(renderer.domElement);
 
     // Create scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(isDarkMode ? 0x1e1e1e : 0xffffff);
-    sceneRef.current = scene;
 
-    // Create camera
-    const camera = new THREE.OrthographicCamera(
-      0,
-      containerWidth,
-      containerHeight,
-      0,
-      1,
-      1000
-    );
-    camera.position.z = 500;
+    // Create camera (orthographic for 2D rendering)
+    const camera = new THREE.OrthographicCamera(0, width, height, 0, 0.1, 1000);
+    camera.position.z = 5;
+
+    // Store refs
+    rendererRef.current = renderer;
+    sceneRef.current = scene;
     cameraRef.current = camera;
 
-    // Create renderer with anti-aliasing and better shadows
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      powerPreference: "high-performance",
+    // Set camera position
+    camera.left = 0;
+    camera.right = width;
+    camera.top = height;
+    camera.bottom = 0;
+    camera.updateProjectionMatrix();
+
+    // Set up the scene with cells
+    initScene();
+    hasInitializedRef.current = true;
+
+    // Set up resize observer
+    const resizeObserver = new ResizeObserver(() => {
+      if (!mountRef.current) return;
+      const { width, height } = mountRef.current.getBoundingClientRect();
+      setContainerDimensions({ width, height });
+      visibleRowsCount.current = Math.ceil(height / rowHeight) + 1;
+
+      // Update renderer size
+      if (rendererRef.current) {
+        rendererRef.current.setSize(width, height);
+      }
+
+      // Update camera
+      if (cameraRef.current) {
+        cameraRef.current.left = 0;
+        cameraRef.current.right = width;
+        cameraRef.current.top = height;
+        cameraRef.current.bottom = 0;
+        cameraRef.current.updateProjectionMatrix();
+      }
+
+      // Re-render scene
+      initScene();
     });
-    renderer.setSize(containerWidth, containerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = false; // Disable shadows for better performance
-    rendererRef.current = renderer;
 
-    // Append renderer to the container
-    mountRef.current.appendChild(renderer.domElement);
+    if (mountRef.current) {
+      resizeObserver.observe(mountRef.current);
+    }
 
-    // Add ambient light for better visual appeal
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
-
+    // Cleanup
     return () => {
-      // Clean up resources
-      if (animationFrameRef.current) {
+      if (mountRef.current) {
+        resizeObserver.unobserve(mountRef.current);
+      }
+
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+      }
+
+      if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
       }
 
-      renderer.dispose();
-      if (mountRef.current && renderer.domElement) {
-        mountRef.current.removeChild(renderer.domElement);
-      }
-
       Object.values(meshesRef.current).forEach((mesh) => {
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach((material) => material.dispose());
-          } else {
-            mesh.material.dispose();
-          }
-        }
-      });
-    };
-  }, [width, height, rowHeight, isDarkMode]);
-
-  // Create or update cell meshes
-  const renderCells = useCallback(() => {
-    if (!sceneRef.current || !rendererRef.current || !cameraRef.current) return;
-
-    const scene = sceneRef.current;
-    const renderer = rendererRef.current;
-    const camera = cameraRef.current;
-
-    // Clear existing meshes
-    Object.values(meshesRef.current).forEach((mesh) => {
-      scene.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) {
+        mesh.geometry.dispose();
         if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((material) => material.dispose());
+          mesh.material.forEach((m) => m.dispose());
         } else {
           mesh.material.dispose();
         }
+      });
+    };
+  }, [isDarkMode, rowHeight]);
+
+  // Handle scrollbar thumb dragging
+  const handleScrollbarThumbMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isDraggingRef.current = true;
+
+      const handleMouseMove = (e: MouseEvent) => {
+        if (!isDraggingRef.current || !mountRef.current) return;
+
+        const { height } = mountRef.current.getBoundingClientRect();
+        const scrollbarHeight = height;
+        const mouseY = e.clientY;
+        const rect = mountRef.current.getBoundingClientRect();
+        const scrollbarTop = rect.top;
+
+        // Calculate relative mouse position within the scrollbar
+        const relativeY = mouseY - scrollbarTop;
+        const scrollPercentage = Math.max(
+          0,
+          Math.min(1, relativeY / scrollbarHeight)
+        );
+
+        // Set new scroll offset
+        const newOffset = Math.max(
+          0,
+          Math.min(
+            scrollPercentage * totalHeight.current,
+            totalHeight.current - containerDimensions.height
+          )
+        );
+
+        setScrollOffset(newOffset);
+      };
+
+      const handleMouseUp = () => {
+        isDraggingRef.current = false;
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [containerDimensions.height]
+  );
+
+  // Handle mouse move for row hover effects
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      if (!mountRef.current || !sceneRef.current || !cameraRef.current) return;
+
+      // Calculate mouse position in normalized device coordinates (-1 to +1)
+      const rect = mountRef.current.getBoundingClientRect();
+
+      // Fix: Convert mouse coordinates to match WebGL coordinate system
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      // Use raycaster to find objects at mouse position
+      raycasterRef.current.setFromCamera(
+        new THREE.Vector2(
+          (x / rect.width) * 2 - 1,
+          -((y / rect.height) * 2 - 1)
+        ),
+        cameraRef.current
+      );
+
+      // Calculate objects intersecting the picking ray
+      const intersects = raycasterRef.current.intersectObjects(
+        sceneRef.current.children
+      );
+
+      if (intersects.length > 0) {
+        const intersectedMesh = intersects[0].object as THREE.Mesh;
+        if (intersectedMesh.userData) {
+          // Only update hover state if it changed (prevents unnecessary re-renders)
+          if (hoveredRow !== intersectedMesh.userData.rowIndex) {
+            setHoveredRow(intersectedMesh.userData.rowIndex);
+          }
+        }
+      } else if (hoveredRow !== null) {
+        setHoveredRow(null);
+      }
+    },
+    [hoveredRow]
+  );
+
+  // Track when mouse enters the WebGL container
+  const handleMouseEnter = useCallback(() => {
+    isMouseInsideRef.current = true;
+  }, []);
+
+  // Track when mouse leaves the WebGL container
+  const handleMouseLeave = useCallback(() => {
+    isMouseInsideRef.current = false;
+    setHoveredRow(null);
+  }, []);
+
+  // Updated wheel handler that DOESN'T prevent page scrolling
+  const handleWheel = useCallback(
+    (event: React.WheelEvent) => {
+      // Only handle scrolling when reaching the top or bottom of the table
+      const delta = event.deltaY;
+      const newOffset = Math.max(
+        0,
+        Math.min(
+          scrollOffset + delta,
+          totalHeight.current - containerDimensions.height
+        )
+      );
+
+      // Only prevent default page scroll when we're handling the scroll
+      // within the bounds of our content
+      if (
+        (delta > 0 &&
+          scrollOffset < totalHeight.current - containerDimensions.height) ||
+        (delta < 0 && scrollOffset > 0)
+      ) {
+        // Only if we're not at the top or bottom edge of our content
+        if (newOffset !== scrollOffset) {
+          event.preventDefault();
+          setScrollOffset(newOffset);
+        }
+      }
+    },
+    [scrollOffset, containerDimensions.height]
+  );
+
+  // Handle mouse click for row selection
+  const handleMouseClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (!mountRef.current || !sceneRef.current || !cameraRef.current) return;
+      if (!onRowClick) return;
+
+      // Calculate mouse position for raycasting
+      const rect = mountRef.current.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      // Update the picking ray with the camera and mouse position (fix coordinates)
+      raycasterRef.current.setFromCamera(
+        new THREE.Vector2(
+          (x / rect.width) * 2 - 1,
+          -((y / rect.height) * 2 - 1)
+        ),
+        cameraRef.current
+      );
+
+      // Calculate objects intersecting the picking ray
+      const intersects = raycasterRef.current.intersectObjects(
+        sceneRef.current.children
+      );
+
+      if (intersects.length > 0) {
+        const intersectedMesh = intersects[0].object as THREE.Mesh;
+        if (intersectedMesh.userData && intersectedMesh.userData.rowData) {
+          onRowClick(
+            intersectedMesh.userData.rowData,
+            intersectedMesh.userData.rowIndex
+          );
+        }
+      }
+    },
+    [onRowClick]
+  );
+
+  // Handle mouse double-click for row actions
+  const handleMouseDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (!mountRef.current || !sceneRef.current || !cameraRef.current) return;
+      if (!onRowDoubleClick) return;
+
+      // Calculate mouse position for raycasting
+      const rect = mountRef.current.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      // Update the picking ray with the camera and mouse position (fix coordinates)
+      raycasterRef.current.setFromCamera(
+        new THREE.Vector2(
+          (x / rect.width) * 2 - 1,
+          -((y / rect.height) * 2 - 1)
+        ),
+        cameraRef.current
+      );
+
+      // Calculate objects intersecting the picking ray
+      const intersects = raycasterRef.current.intersectObjects(
+        sceneRef.current.children
+      );
+
+      if (intersects.length > 0) {
+        const intersectedMesh = intersects[0].object as THREE.Mesh;
+        if (intersectedMesh.userData && intersectedMesh.userData.rowData) {
+          onRowDoubleClick(
+            intersectedMesh.userData.rowData,
+            intersectedMesh.userData.rowIndex
+          );
+        }
+      }
+    },
+    [onRowDoubleClick]
+  );
+
+  // Initialize scene with grid cells
+  const initScene = useCallback(() => {
+    if (!mountRef.current) return;
+    if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+
+    // Set clear color based on dark mode
+    scene.background = new THREE.Color(isDarkMode ? 0x1e1e1e : 0xffffff);
+
+    // Clear previous meshes
+    Object.values(meshesRef.current).forEach((mesh) => {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((m) => m.dispose());
+      } else {
+        mesh.material.dispose();
       }
     });
-
     meshesRef.current = {};
 
-    // Calculate cell dimensions (default width if not provided)
-    const cellWidths = columns.map((col) => col.width || 100);
-    const totalWidth = cellWidths.reduce((sum, w) => sum + w, 0);
-
-    // Calculate visible rows based on scroll position
+    // Calculate visible rows
     const startRowIndex = Math.floor(scrollOffset / rowHeight);
     const endRowIndex = Math.min(
       startRowIndex + visibleRowsCount.current,
       data.length
     );
 
-    // Create grid of cells - only render visible rows
-    for (let rowIndex = startRowIndex; rowIndex < endRowIndex; rowIndex++) {
-      if (rowIndex >= data.length) break;
+    // Calculate total width of all columns
+    const cellWidths = columns.map((col) => col.width || 100);
+    const totalWidth = cellWidths.reduce((sum, width) => sum + width, 0);
 
-      const rowData = data[rowIndex];
+    // Always include the header row (row index -1)
+    const includedRows = [-1]; // Header row
+    for (let i = startRowIndex; i < endRowIndex; i++) {
+      includedRows.push(i);
+    }
+
+    // Render all included rows (header + visible data rows)
+    includedRows.forEach((rowIndex) => {
       let offsetX = 0;
 
       columns.forEach((col, colIndex) => {
-        const cellValue = rowData[col.key];
+        // Set cell value based on whether this is a header row or data row
+        const cellValue =
+          rowIndex === -1 ? col.title : data[rowIndex]?.[col.key];
         const cellWidth = cellWidths[colIndex];
+        const isHeader = rowIndex === -1;
 
         // Create a higher-resolution canvas for the cell texture
         const canvas = document.createElement("canvas");
@@ -198,7 +435,6 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
 
           // Draw background with subtle gradient
           const isHovered = rowIndex === hoveredRow;
-          const isHeader = rowIndex === 0;
 
           // Set background color based on row state and dark mode
           let bgColor;
@@ -230,127 +466,35 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
 
           // Draw text with better styling
           context.fillStyle = isDarkMode ? "#e0e0e0" : "#333333";
-          context.font =
-            "13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif";
+          context.font = `${
+            isHeader ? "bold" : "normal"
+          } 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif`;
           context.textAlign = "left";
           context.textBaseline = "middle";
 
-          // Format the cell value based on data type
-          let displayValue = String(cellValue);
-          if (cellValue === null || cellValue === undefined) {
-            displayValue = "—";
-            context.fillStyle = isDarkMode ? "#777777" : "#999999";
-          } else if (typeof cellValue === "boolean") {
-            displayValue = cellValue ? "✓" : "✗";
-            context.fillStyle = cellValue ? "#4caf50" : "#f44336";
-            context.font =
-              "bold 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-          } else if (cellValue instanceof Date) {
-            displayValue = cellValue.toLocaleDateString();
-          } else if (typeof cellValue === "number") {
-            if (col.key === "salary") {
-              displayValue = new Intl.NumberFormat("en-US", {
-                style: "currency",
-                currency: "USD",
-              }).format(cellValue);
+          // Format and draw cell content
+          let displayValue = "";
 
-              // Highlight high salaries
-              if (cellValue > 80000) {
-                context.fillStyle = "#4caf50";
-                context.font =
-                  "bold 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+          if (cellValue !== undefined && cellValue !== null) {
+            if (typeof cellValue === "object") {
+              try {
+                displayValue = JSON.stringify(cellValue);
+              } catch (e) {
+                displayValue = "[Object]";
               }
+            } else {
+              displayValue = String(cellValue);
             }
           }
 
-          // Truncate text if it's too long
-          if (displayValue.length > 20) {
-            displayValue = displayValue.substring(0, 17) + "...";
-          }
-
-          // Add padding to text
-          context.fillText(displayValue, 8, rowHeight / 2);
-
-          // Draw header styling
-          if (isHeader) {
-            context.font =
-              "bold 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-          }
-
-          // Draw department chips similar to standard table
-          if (col.key === "department" && cellValue) {
-            const chipWidth = context.measureText(displayValue).width + 16;
-            const chipHeight = 20;
-            const chipX = 8;
-            const chipY = (rowHeight - chipHeight) / 2;
-
-            // Chip background colors
-            let chipBg, chipText;
-            switch (cellValue) {
-              case "Engineering":
-                chipBg = isDarkMode ? "#1565c0" : "#bbdefb";
-                chipText = isDarkMode ? "#ffffff" : "#0d47a1";
-                break;
-              case "Sales":
-                chipBg = isDarkMode ? "#2e7d32" : "#c8e6c9";
-                chipText = isDarkMode ? "#ffffff" : "#1b5e20";
-                break;
-              case "Marketing":
-                chipBg = isDarkMode ? "#d84315" : "#ffccbc";
-                chipText = isDarkMode ? "#ffffff" : "#bf360c";
-                break;
-              case "HR":
-                chipBg = isDarkMode ? "#6a1b9a" : "#e1bee7";
-                chipText = isDarkMode ? "#ffffff" : "#4a148c";
-                break;
-              case "Support":
-                chipBg = isDarkMode ? "#9e9d24" : "#f0f4c3";
-                chipText = isDarkMode ? "#ffffff" : "#827717";
-                break;
-              default:
-                chipBg = isDarkMode ? "#424242" : "#f5f5f5";
-                chipText = isDarkMode ? "#ffffff" : "#333333";
-            }
-
-            // Draw chip background
-            context.fillStyle = chipBg;
-            context.beginPath();
-            context.roundRect(chipX, chipY, chipWidth, chipHeight, 10);
-            context.fill();
-
-            // Draw chip text
-            context.fillStyle = chipText;
-            context.font =
-              "bold 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            context.fillText(displayValue, chipX + 8, rowHeight / 2);
-          }
-
-          // Draw active/inactive status similar to standard table
-          if (col.key === "active") {
-            const statusWidth = 40;
-            const statusHeight = 20;
-            const statusX = 8;
-            const statusY = (rowHeight - statusHeight) / 2;
-
-            // Status background
-            const statusBg = cellValue ? "#4caf50" : "#f44336";
-
-            // Draw status background
-            context.fillStyle = statusBg;
-            context.beginPath();
-            context.roundRect(statusX, statusY, statusWidth, statusHeight, 10);
-            context.fill();
-
-            // Draw status text
-            context.fillStyle = "#ffffff";
-            context.font =
-              "bold 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            context.fillText(
-              cellValue ? "Yes" : "No",
-              statusX + 8,
-              rowHeight / 2
-            );
-          }
+          // Text with ellipsis
+          const maxTextWidth = cellWidth - 16; // Account for padding
+          let textX = 8; // 8px padding
+          context.fillText(
+            truncateText(displayValue, context, maxTextWidth),
+            textX,
+            rowHeight / 2
+          );
         }
 
         // Create texture from canvas
@@ -358,26 +502,38 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;
 
-        // Create material with the texture
+        // Create a plane geometry for the cell
+        const geometry = new THREE.PlaneGeometry(cellWidth, rowHeight);
+
+        // Create material with the canvas texture
         const material = new THREE.MeshBasicMaterial({
           map: texture,
-          transparent: false,
-          side: THREE.FrontSide,
+          transparent: true,
         });
-
-        // Create geometry for the cell
-        const geometry = new THREE.PlaneGeometry(cellWidth, rowHeight);
 
         // Create mesh
         const mesh = new THREE.Mesh(geometry, material);
 
-        // Position the mesh
+        // Position the mesh - adjust for header row to be at the top
         mesh.position.x = offsetX + cellWidth / 2;
-        mesh.position.y =
-          (rowIndex - startRowIndex) * rowHeight + rowHeight / 2;
+
+        // Position Y accounting for header row
+        if (isHeader) {
+          // Header row is positioned at the top and stays fixed
+          mesh.position.y = rowHeight / 2;
+        } else {
+          // Data rows positioned below the header with scroll offset
+          mesh.position.y =
+            (rowIndex - startRowIndex + 1) * rowHeight + rowHeight / 2;
+        }
 
         // Store row data in the mesh's userData for interaction
-        mesh.userData = { rowData, rowIndex, columnKey: col.key };
+        mesh.userData = {
+          rowData: isHeader ? null : data[rowIndex],
+          rowIndex,
+          columnKey: col.key,
+          isHeader,
+        };
 
         // Store reference to the mesh
         const meshId = `cell-${rowIndex}-${colIndex}`;
@@ -389,271 +545,89 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
         // Increment X offset for next cell
         offsetX += cellWidth;
       });
-    }
+    });
+
+    // Update total height to include the header row
+    totalHeight.current = (data.length + 1) * rowHeight;
 
     // Render the scene
     renderer.render(scene, camera);
-  }, [data, columns, rowHeight, scrollOffset, hoveredRow, isDarkMode]);
+  }, [
+    data,
+    columns,
+    rowHeight,
+    scrollOffset,
+    hoveredRow,
+    isDarkMode,
+    width,
+    height,
+  ]);
 
-  // Animation loop for smooth rendering
-  const animate = useCallback(() => {
-    if (rendererRef.current && sceneRef.current && cameraRef.current) {
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
+  // Helper function to truncate text with ellipsis
+  const truncateText = (
+    text: string,
+    context: CanvasRenderingContext2D,
+    maxWidth: number
+  ): string => {
+    if (!text) return "";
+
+    if (context.measureText(text).width <= maxWidth) {
+      return text;
     }
-    animationFrameRef.current = requestAnimationFrame(animate);
-  }, []);
 
-  // Handle window resize
-  const handleResize = useCallback(() => {
-    if (!mountRef.current || !rendererRef.current || !cameraRef.current) return;
+    let truncated = text;
+    let width = context.measureText(truncated).width;
 
-    const containerWidth =
-      typeof width === "number" ? width : mountRef.current.clientWidth;
-    const containerHeight =
-      typeof height === "number"
-        ? height
-        : mountRef.current.clientHeight || 400;
-
-    // Update renderer size
-    rendererRef.current.setSize(containerWidth, containerHeight);
-
-    // Update camera
-    const camera = cameraRef.current;
-    camera.left = 0;
-    camera.right = containerWidth;
-    camera.top = containerHeight;
-    camera.bottom = 0;
-    camera.updateProjectionMatrix();
-
-    // Update container dimensions state
-    setContainerDimensions({ width: containerWidth, height: containerHeight });
-
-    // Update visible rows count
-    visibleRowsCount.current = Math.ceil(containerHeight / rowHeight) + 2;
-
-    // Re-render
-    if (rendererRef.current && sceneRef.current && cameraRef.current) {
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
+    while (width > maxWidth && truncated.length > 1) {
+      truncated = truncated.slice(0, -1);
+      width = context.measureText(truncated + "...").width;
     }
-  }, [width, height, rowHeight]);
 
-  // Handle mouse move for hover effects
-  const handleMouseMove = useCallback((event: React.MouseEvent) => {
-    if (
-      !mountRef.current ||
-      !sceneRef.current ||
-      !cameraRef.current ||
-      !rendererRef.current
-    )
-      return;
+    return truncated + "...";
+  };
 
-    // Calculate mouse position in normalized device coordinates (-1 to +1)
-    const rect = mountRef.current.getBoundingClientRect();
-    mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    // Update the picking ray with the camera and mouse position
-    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-
-    // Calculate objects intersecting the picking ray
-    const intersects = raycasterRef.current.intersectObjects(
-      sceneRef.current.children
-    );
-
-    if (intersects.length > 0) {
-      const intersectedMesh = intersects[0].object as THREE.Mesh;
-      if (
-        intersectedMesh.userData &&
-        intersectedMesh.userData.rowIndex !== undefined
-      ) {
-        setHoveredRow(intersectedMesh.userData.rowIndex);
-      }
-    } else {
-      setHoveredRow(null);
-    }
-  }, []);
-
-  // Handle mouse click for row selection
-  const handleMouseClick = useCallback(
-    (event: React.MouseEvent) => {
-      if (!mountRef.current || !sceneRef.current || !cameraRef.current) return;
-      if (!onRowClick) return;
-
-      // Calculate mouse position in normalized device coordinates (-1 to +1)
-      const rect = mountRef.current.getBoundingClientRect();
-      mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      // Update the picking ray with the camera and mouse position
-      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-
-      // Calculate objects intersecting the picking ray
-      const intersects = raycasterRef.current.intersectObjects(
-        sceneRef.current.children
-      );
-
-      if (intersects.length > 0) {
-        const intersectedMesh = intersects[0].object as THREE.Mesh;
-        if (intersectedMesh.userData && intersectedMesh.userData.rowData) {
-          onRowClick(
-            intersectedMesh.userData.rowData,
-            intersectedMesh.userData.rowIndex
-          );
-        }
-      }
-    },
-    [onRowClick]
-  );
-
-  // Handle mouse double click
-  const handleMouseDoubleClick = useCallback(
-    (event: React.MouseEvent) => {
-      if (!mountRef.current || !sceneRef.current || !cameraRef.current) return;
-      if (!onRowDoubleClick) return;
-
-      // Calculate mouse position in normalized device coordinates (-1 to +1)
-      const rect = mountRef.current.getBoundingClientRect();
-      mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-      // Update the picking ray with the camera and mouse position
-      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-
-      // Calculate objects intersecting the picking ray
-      const intersects = raycasterRef.current.intersectObjects(
-        sceneRef.current.children
-      );
-
-      if (intersects.length > 0) {
-        const intersectedMesh = intersects[0].object as THREE.Mesh;
-        if (intersectedMesh.userData && intersectedMesh.userData.rowData) {
-          onRowDoubleClick(
-            intersectedMesh.userData.rowData,
-            intersectedMesh.userData.rowIndex
-          );
-        }
-      }
-    },
-    [onRowDoubleClick]
-  );
-
-  // Handle wheel event for smooth scrolling
-  const handleWheel = useCallback(
-    (event: React.WheelEvent) => {
-      event.preventDefault();
-
-      // Calculate new scroll offset with smoother scrolling
-      const delta = event.deltaY * 0.5; // Reduce scroll speed for smoother scrolling
-      const newOffset = Math.max(
-        0,
-        Math.min(
-          scrollOffset + delta,
-          totalHeight.current - containerDimensions.height
-        )
-      );
-
-      setScrollOffset(newOffset);
-    },
-    [scrollOffset, containerDimensions.height]
-  );
-
-  // Handle scrollbar thumb drag
-  const handleScrollThumbMouseDown = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    isDraggingRef.current = true;
-    document.addEventListener("mousemove", handleScrollThumbMouseMove);
-    document.addEventListener("mouseup", handleScrollThumbMouseUp);
-  }, []);
-
-  const handleScrollThumbMouseMove = useCallback(
-    (event: MouseEvent) => {
-      if (!isDraggingRef.current || !scrollbarThumbRef.current) return;
-
-      const scrollbarRect =
-        scrollbarThumbRef.current.parentElement?.getBoundingClientRect();
-      if (!scrollbarRect) return;
-
-      const scrollRatio =
-        (event.clientY - scrollbarRect.top) / scrollbarRect.height;
-      const newOffset = Math.max(
-        0,
-        Math.min(
-          scrollRatio * totalHeight.current,
-          totalHeight.current - containerDimensions.height
-        )
-      );
-
-      setScrollOffset(newOffset);
-    },
-    [containerDimensions.height]
-  );
-
-  const handleScrollThumbMouseUp = useCallback(() => {
-    isDraggingRef.current = false;
-    document.removeEventListener("mousemove", handleScrollThumbMouseMove);
-    document.removeEventListener("mouseup", handleScrollThumbMouseUp);
-  }, [handleScrollThumbMouseMove]);
-
-  // Initialize scene on component mount
+  // Render loop - update when scrollOffset or hoveredRow changes
   useEffect(() => {
-    const cleanup = initScene();
-    window.addEventListener("resize", handleResize);
+    // Only rerender the scene if we have initialized
+    if (hasInitializedRef.current) {
+      initScene();
+    }
 
-    // Start animation loop
+    // Set up render loop
+    const animate = () => {
+      if (rendererRef.current && sceneRef.current && cameraRef.current) {
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      }
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
     animationFrameRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (cleanup) cleanup();
-      window.removeEventListener("resize", handleResize);
-      if (animationFrameRef.current) {
+      if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-
-      // Clean up scrollbar event listeners
-      document.removeEventListener("mousemove", handleScrollThumbMouseMove);
-      document.removeEventListener("mouseup", handleScrollThumbMouseUp);
     };
-  }, [
-    initScene,
-    handleResize,
-    animate,
-    handleScrollThumbMouseMove,
-    handleScrollThumbMouseUp,
-  ]);
+  }, [initScene, scrollOffset, hoveredRow]);
 
-  // Update cells when data, columns, or scroll position changes
+  // Update total height when data changes - removed to avoid infinite rerendering loop
   useEffect(() => {
-    if (sceneRef.current && rendererRef.current && cameraRef.current) {
-      renderCells();
-    }
-  }, [renderCells, containerDimensions, scrollOffset, hoveredRow, isDarkMode]);
-
-  // Update scene background when dark mode changes
-  useEffect(() => {
-    if (sceneRef.current) {
-      sceneRef.current.background = new THREE.Color(
-        isDarkMode ? 0x1e1e1e : 0xffffff
-      );
-    }
-  }, [isDarkMode]);
-
-  // Update total height when data changes
-  useEffect(() => {
-    totalHeight.current = data.length * rowHeight;
-  }, [data, rowHeight]);
+    // Update total height calculation only when data or rowHeight changes
+    totalHeight.current = (data.length + 1) * rowHeight; // +1 for header row
+  }, [data.length, rowHeight]); // Only depend on data.length, not the entire data object
 
   return (
-    <div className={styles.webGLWrapper}>
+    <div className={styles.webGLWrapper} style={{ width, height }}>
       <div
         className={styles.webGLContainer}
         ref={mountRef}
         style={{
-          width: width,
-          height: height,
           position: "relative",
           cursor: "pointer",
         }}
         onMouseMove={handleMouseMove}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onClick={handleMouseClick}
         onDoubleClick={handleMouseDoubleClick}
         onWheel={handleWheel}
@@ -670,7 +644,7 @@ const WebGLRenderer: React.FC<WebGLRendererProps> = ({
             )}%`,
             top: `${(scrollOffset / totalHeight.current) * 100}%`,
           }}
-          onMouseDown={handleScrollThumbMouseDown}
+          onMouseDown={handleScrollbarThumbMouseDown}
         />
       </div>
     </div>

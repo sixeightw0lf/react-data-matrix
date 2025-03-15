@@ -36,6 +36,31 @@ const GridCell: React.FC<GridCellProps> = ({
       return <span className={styles.emptyCell}>-</span>;
     }
 
+    // Handle specific column types
+    if (column.key === "active") {
+      return (
+        <span
+          className={`${styles.statusBadge} ${
+            value ? styles.statusActive : styles.statusInactive
+          }`}
+        >
+          {value ? "Yes" : "No"}
+        </span>
+      );
+    }
+
+    if (column.key === "department") {
+      return (
+        <span
+          className={`${styles.chip} ${
+            styles[`chip${value.replace(/\s+/g, "")}`] || styles.chipDefault
+          }`}
+        >
+          {value}
+        </span>
+      );
+    }
+
     if (typeof value === "boolean") {
       return value ? "✓" : "✗";
     }
@@ -47,11 +72,22 @@ const GridCell: React.FC<GridCellProps> = ({
 
     // Format numbers with commas
     if (typeof value === "number" && !isNaN(value)) {
+      // Format currency for salary
+      if (column.key === "salary") {
+        return new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format(value);
+      }
       return value.toLocaleString();
     }
 
     return value;
   };
+
+  // Calculate width styling based on column configuration
+  const columnWidth = column.width ? `${column.width}px` : "auto";
+  const flexBasis = column.width ? `${column.width}px` : "0";
 
   return (
     <div
@@ -60,7 +96,11 @@ const GridCell: React.FC<GridCellProps> = ({
         ${isSelected ? styles.selected : ""}
         ${isFocused ? styles.focused : ""}
       `}
-      style={{ width: column.width || "auto" }}
+      style={{
+        width: columnWidth,
+        flexBasis: flexBasis,
+        flexGrow: column.width ? 0 : 1,
+      }}
       onClick={handleClick}
       data-column={column.key}
       data-row={rowIndex}

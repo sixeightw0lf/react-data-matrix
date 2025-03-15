@@ -53,17 +53,34 @@ const GridHeader: React.FC<GridHeaderProps> = ({
   };
 
   return (
-    <div className={styles.gridHeader}>
+    <div className={styles.gridHeader} role="row">
       {columns.map((col) => {
         const isSorted = sortConfig?.key === col.key;
         const sortDirection = isSorted ? sortConfig.direction : null;
+
+        // Calculate fixed width based on column configuration
+        const columnWidth = col.width ? `${col.width}px` : "auto";
+        const flexBasis = col.width ? `${col.width}px` : "0";
 
         return (
           <div
             key={col.key}
             className={`${styles.headerCell} ${isSorted ? styles.sorted : ""}`}
-            style={{ width: col.width || "auto", position: "relative" }}
-            onClick={() => onSort && onSort(col)}
+            style={{
+              width: columnWidth,
+              flexBasis: flexBasis,
+              flexGrow: col.width ? 0 : 1,
+              position: "relative",
+            }}
+            onClick={() => onSort && col.sortable !== false && onSort(col)}
+            role="columnheader"
+            aria-sort={
+              isSorted
+                ? sortDirection === "asc"
+                  ? "ascending"
+                  : "descending"
+                : undefined
+            }
           >
             <span>{col.title}</span>
 
@@ -84,6 +101,7 @@ const GridHeader: React.FC<GridHeaderProps> = ({
                   handleResizeStart(e, col.key, col.width || 100)
                 }
                 onClick={(e) => e.stopPropagation()}
+                aria-hidden="true"
               />
             )}
           </div>
