@@ -116,7 +116,8 @@ const App: React.FC = () => {
           style={{
             textAlign: "right",
             fontWeight: value > 80000 ? "bold" : "normal",
-            color: value > 80000 ? "#4caf50" : "inherit",
+            color:
+              value > 80000 ? "var(--status-active)" : "var(--grid-text-color)",
           }}
         >
           {formatCurrency(value)}
@@ -131,8 +132,15 @@ const App: React.FC = () => {
       cellRenderer: (value: any) => (
         <span
           style={{
-            color: value ? "#4caf50" : "#f44336",
+            backgroundColor: value
+              ? "var(--status-active)"
+              : "var(--status-inactive)",
+            color: "var(--status-text)",
             fontWeight: "bold",
+            padding: "2px 8px",
+            borderRadius: "12px",
+            fontSize: "0.85em",
+            display: "inline-block",
           }}
         >
           {value ? "Yes" : "No"}
@@ -152,21 +160,44 @@ const App: React.FC = () => {
       width: 150,
       sortable: true,
       cellRenderer: (value: any) => {
-        const colorMap: Record<string, string> = {
-          Engineering: "#bbdefb",
-          Sales: "#c8e6c9",
-          Marketing: "#ffccbc",
-          HR: "#e1bee7",
-          Support: "#f0f4c3",
+        const departmentVars: Record<string, { bg: string; text: string }> = {
+          Engineering: {
+            bg: "var(--chip-engineering)",
+            text: "var(--chip-engineering-text)",
+          },
+          Sales: {
+            bg: "var(--chip-sales)",
+            text: "var(--chip-sales-text)",
+          },
+          Marketing: {
+            bg: "var(--chip-marketing)",
+            text: "var(--chip-marketing-text)",
+          },
+          HR: {
+            bg: "var(--chip-hr)",
+            text: "var(--chip-hr-text)",
+          },
+          Support: {
+            bg: "var(--chip-support)",
+            text: "var(--chip-support-text)",
+          },
+        };
+
+        const chipStyle = departmentVars[value] || {
+          bg: "var(--chip-default-bg)",
+          text: "var(--chip-default-text)",
         };
 
         return (
           <span
             style={{
-              backgroundColor: colorMap[value] || "#f5f5f5",
+              backgroundColor: chipStyle.bg,
+              color: chipStyle.text,
               padding: "2px 8px",
               borderRadius: "12px",
               fontSize: "0.85em",
+              fontWeight: "medium",
+              display: "inline-block",
             }}
           >
             {value}
@@ -264,6 +295,7 @@ const App: React.FC = () => {
           onCellKeyDown={handleCellKeyDown}
           ariaLabelledBy="grid-title"
           ariaDescribedBy="grid-description"
+          className={darkMode ? "dark-mode" : ""}
         />
         <div id="grid-title" className="sr-only">
           User Data Grid
@@ -286,6 +318,7 @@ const App: React.FC = () => {
           height={500}
           useWebGL={true}
           loading={loading}
+          className={darkMode ? "dark-mode" : ""}
         />
       </section>
 
